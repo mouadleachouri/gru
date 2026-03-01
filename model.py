@@ -128,19 +128,19 @@ if __name__ == "__main__":
     )
     model.compile(
         optimizer="adam",
-        loss="binary_crossentropy",
+        loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
 
     rng = np.random.default_rng(seed=42)
-    all_inputs = rng.normal(loc=5, scale=10, size=(1000, 100, 10))
-    all_outputs = rng.uniform(low=0, high=1, size=(1000, 10))
+    all_inputs = rng.normal(loc=5, scale=5, size=(1000, 100, 10))
+    all_outputs = rng.uniform(low=0, high=9, size=(1000, 1))
 
     history = model.fit(
         x=all_inputs,
         y=all_outputs,
         validation_split=0.1,
-        batch_size=8,
+        batch_size=32,
         epochs=100,
     )
     plt.plot(history.history["loss"], label="loss")
