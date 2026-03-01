@@ -128,13 +128,13 @@ if __name__ == "__main__":
     )
     model.compile(
         optimizer="adam",
-        loss="sparse_categorical_crossentropy",
+        loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
 
     rng = np.random.default_rng(seed=42)
     all_inputs = rng.normal(loc=5, scale=5, size=(1000, 100, 10))
-    all_outputs = rng.uniform(low=0, high=9, size=(1000, 1))
+    all_outputs = tf.one_hot(rng.uniform(low=0, high=9, size=(1000,)), 10)
 
     history = model.fit(
         x=all_inputs,
@@ -143,7 +143,8 @@ if __name__ == "__main__":
         batch_size=32,
         epochs=100,
     )
-    plt.plot(history.history["loss"], label="loss")
+    plt.plot(history.history["loss"], label="train_loss")
+    plt.plot(history.history["accuracy"], label="train_accuracy")
     plt.plot(history.history["val_loss"], label="val_loss")
     plt.plot(history.history["val_accuracy"], label="val_accuracy")
     plt.legend()
