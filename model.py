@@ -6,7 +6,7 @@ import keras
 import numpy as np
 import tensorflow as tf
 from keras import Model
-from keras.layers import Concatenate, Dense
+from keras.layers import Concatenate, Dense, Dropout
 
 
 class GRUCell(Model):
@@ -15,6 +15,7 @@ class GRUCell(Model):
     def __init__(
         self: GRUCell,
         units: int,
+        dropout_rate: float,
     ) -> None:
         """Initialize a GRUCell instance.
 
@@ -22,6 +23,8 @@ class GRUCell(Model):
         ----------
         units : int
             Number of units.
+        dropout_rate: float
+            The dropout rate.
 
         """
         super().__init__()
@@ -35,20 +38,28 @@ class GRUCell(Model):
             units=units,
             activation="sigmoid",
         )
+        self._dropout = Dropout(
+            name="dropout",
+            rate=dropout_rate,
+        )
 
     def call(
         self: GRUCell,
         input_embedding: tf.Tensor,
         prev_hidden_state: tf.Tensor,
+        *,
+        training: bool = False,
     ) -> tf.Tensor:
         """GRU cell forward.
 
         Parameters
         ----------
-        input_embedding: tf.Tensor
+        input_embedding : tf.Tensor
             Input embedding.
-        prev_hidden_state: tf.Tensor
+        prev_hidden_state : tf.Tensor
             Previous hidden state.
+        training : bool
+            Whether the model is training or inferring.
 
         Returns
         -------
@@ -57,6 +68,7 @@ class GRUCell(Model):
 
         """
         concatenated_inputs = Concatenate(axis=1)([input_embedding, prev_hidden_state])
+        concatenated_inputs = self._dropout(concatenated_inputs, training=training)
         hidden_state_candidate = self._dense_candidate(concatenated_inputs)
         update_gate = self._dense_update(concatenated_inputs)
         return (
@@ -70,6 +82,7 @@ class GRUModel(Model):
     def __init__(
         self: GRUModel,
         units: int,
+        dropout_rate: float,
     ) -> None:
         """Build the GRU model architecture.
 
@@ -79,11 +92,13 @@ class GRUModel(Model):
             Number of output units.
         units : int
             Number of units.
+        dropout_rate : float
+            The dropout rate.
 
         """
         super().__init__()
         self._units = units
-        self._gru_cell = GRUCell(units=units)
+        self._gru_cell = GRUCell(units=units, dropout_rate=dropout_rate)
         self._dense_output = Dense(
             name="dense_output",
             units=1,
@@ -175,7 +190,7 @@ if __name__ == "__main__":
     ds_test = _create_ds(x_test, y_test)
 
     # Train the model
-    model = GRUModel(units=128)
+    model = GRUModel(units=128, dropout_rate=0.1)
     model.compile(
         optimizer="adam",
         loss="binary_crossentropy",
