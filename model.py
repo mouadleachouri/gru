@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import keras
+import numpy as np
 import tensorflow as tf
 from keras import Model
 from keras.layers import Concatenate, Dense
@@ -68,7 +70,6 @@ class GRUModel(Model):
     def __init__(
         self: GRUModel,
         units: int,
-        output_size: int,
     ) -> None:
         """Build the GRU model architecture.
 
@@ -85,8 +86,8 @@ class GRUModel(Model):
         self._gru_cell = GRUCell(units=units)
         self._dense_output = Dense(
             name="dense_output",
-            units=output_size,
-            activation="softmax",
+            units=1,
+            activation="sigmoid",
         )
 
     def call(
@@ -119,33 +120,65 @@ class GRUModel(Model):
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    model = GRUModel(
-        output_size=10,
-        units=128,
+    # Train/Test data
+    num_words, skip_top, maxlen, start_char, oov_char = 1000, 100, 100, 1, 2
+    start_from = skip_top + 1
+    (x_train, y_train), (x_test, y_test) = keras.datasets.imdb.load_data(
+        num_words=num_words,
+        skip_top=skip_top,
+        maxlen=maxlen,
+        start_char=start_char,
+        oov_char=oov_char,
     )
+    for i in range(len(x_train)):
+        x_train[i] = tf.pad(
+            x_train[i],
+            tf.constant([[0, maxlen - len(x_train[i])]]),
+        )
+    for i in range(len(x_test)):
+        x_test[i] = tf.pad(
+            x_test[i],
+            tf.constant([[0, maxlen - len(x_test[i])]]),
+        )
+    x_train, x_test = (
+        np.array([np.array(row) for row in x_train]),
+        np.array([np.array(row) for row in x_test]),
+    )
+
+    # Word/Index mapping
+    word_to_index = keras.datasets.imdb.get_word_index()
+    index_to_word = {start_from + value: key for key, value in word_to_index.items()}
+    index_to_word[1] = "<SOS>"
+    index_to_word[2] = "<OOV>"
+
+    # Create TF Datasets
+    def _one_hot_map(
+        x: np.ndarray,
+        y: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        x = tf.one_hot(x, depth=num_words)
+        return x, y
+
+    def _create_ds(
+        x: np.ndarray,
+        y: np.ndarray,
+    ) -> tf.data.Dataset:
+        return (
+            tf.data.Dataset.from_tensor_slices((x, y))
+            .map(_one_hot_map)
+            .batch(32)
+            .cache()
+            .prefetch(tf.data.AUTOTUNE)
+        )
+
+    ds_train = _create_ds(x_train, y_train)
+    ds_test = _create_ds(x_test, y_test)
+
+    # Train the model
+    model = GRUModel(units=128)
     model.compile(
         optimizer="adam",
-        loss="categorical_crossentropy",
+        loss="binary_crossentropy",
         metrics=["accuracy"],
     )
-
-    rng = np.random.default_rng(seed=42)
-    all_inputs = rng.normal(loc=5, scale=5, size=(1000, 100, 10))
-    all_outputs = tf.one_hot(rng.uniform(low=0, high=9, size=(1000,)), 10)
-
-    history = model.fit(
-        x=all_inputs,
-        y=all_outputs,
-        validation_split=0.1,
-        batch_size=32,
-        epochs=100,
-    )
-    plt.plot(history.history["loss"], label="train_loss")
-    plt.plot(history.history["accuracy"], label="train_accuracy")
-    plt.plot(history.history["val_loss"], label="val_loss")
-    plt.plot(history.history["val_accuracy"], label="val_accuracy")
-    plt.legend()
-    plt.show()
+    model.fit(ds_train, epochs=100, validation_data=ds_test)
